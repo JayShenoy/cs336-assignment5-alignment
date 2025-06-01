@@ -2,6 +2,7 @@ from vllm import LLM, SamplingParams
 import json
 from collections.abc import Callable
 from typing import List
+import pandas as pd
 
 from cs336_alignment.drgrpo_grader import r1_zero_reward_fn
 
@@ -70,5 +71,46 @@ def eval_qwen_math():
     with open('/home/c-jshenoy/cs336-assignment5-alignment/cs336_alignment/output/qwen_baseline_perf.json', 'w') as f:
         json.dump(results, f, indent=4)
 
+def print_qwen_eval_results():
+    with open('/home/c-jshenoy/cs336-assignment5-alignment/cs336_alignment/output/qwen_baseline_perf.json', 'r') as f:
+        results = json.load(f)
+    
+    format_one_answer_one = 0
+    format_one_answer_zero = 0
+    format_zero_answer_zero = 0
+    
+    # Tally each reward combination
+    for r in results:
+        format_reward = r['reward']['format_reward']
+        answer_reward = r['reward']['answer_reward']
+
+        if format_reward == 1 and answer_reward == 1:
+            format_one_answer_one += 1
+        elif format_reward == 1 and answer_reward == 0:
+            format_one_answer_zero += 1
+        elif format_reward == 0 and answer_reward == 0:
+            format_zero_answer_zero += 1
+
+    reward_labels = [
+        'Format Reward = 1, Answer Reward = 1',
+        'Format Reward = 1, Answer Reward = 0',
+        'Format Reward = 0, Answer Reward = 0',
+    ]
+
+    tallies = [
+        format_one_answer_one,
+        format_one_answer_zero,
+        format_zero_answer_zero,
+    ]
+    
+    df = pd.DataFrame({
+        'Reward': reward_labels,
+        'Tally': tallies,
+    })
+
+    table_md = df.to_markdown(index=False)
+    print(table_md)
+
 if __name__ == '__main__':
-    eval_qwen_math()
+    # eval_qwen_math()
+    print_qwen_eval_results()
