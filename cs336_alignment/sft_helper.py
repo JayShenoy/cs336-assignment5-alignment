@@ -1,5 +1,6 @@
 import torch
 import torch.nn.functional as F
+from transformers import PreTrainedModel
 
 
 def tokenize_prompt_and_output(prompt_strs, output_strs, tokenizer):
@@ -41,4 +42,25 @@ def compute_entropy(logits: torch.Tensor) -> torch.Tensor:
 
     summands = (p_numerator / p_denom) * log_prob
 
-    return -torch.sum(summands, dim=-1)    
+    return -torch.sum(summands, dim=-1)
+
+def get_response_log_probs(
+    model: PreTrainedModel,
+    input_ids: torch.Tensor,
+    labels: torch.Tensor,
+    return_token_entropy: bool = False,
+    ) -> dict[str, torch.Tensor]:
+
+    logits = model(input_ids).logits
+
+    log_probs = F.log_softmax(logits, dim=-1)
+    log_probs = torch.gather(log_probs, dim=-1, index=labels.unsqueeze(-1))
+    log_probs = log_probs.squeeze(-1)
+
+    ret_dict = {}
+    ret_dict['log_probs'] = log_probs
+
+    if return_token_entropy:
+        ret_dict['token_entropy'] = compute_entropy(logits)
+    
+    return ret_dict
