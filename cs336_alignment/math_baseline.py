@@ -78,6 +78,9 @@ def print_qwen_eval_results():
     format_one_answer_one = 0
     format_one_answer_zero = 0
     format_zero_answer_zero = 0
+
+    format_zero_10_examples = []
+    format_one_answer_zero_10_examples = []
     
     # Tally each reward combination
     for r in results:
@@ -88,8 +91,14 @@ def print_qwen_eval_results():
             format_one_answer_one += 1
         elif format_reward == 1 and answer_reward == 0:
             format_one_answer_zero += 1
+
+            if len(format_one_answer_zero_10_examples) < 10:
+                format_one_answer_zero_10_examples.append(r)
         elif format_reward == 0 and answer_reward == 0:
             format_zero_answer_zero += 1
+
+            if len(format_zero_10_examples) < 10:
+                format_zero_10_examples.append(r)
 
     reward_labels = [
         'Format Reward = 1, Answer Reward = 1',
@@ -110,6 +119,12 @@ def print_qwen_eval_results():
 
     table_md = df.to_markdown(index=False)
     print(table_md)
+
+    print('10 examples where format reward = 0:')
+    print(json.dumps(format_zero_10_examples, indent=4))
+
+    print('10 examples where format reward = 1, answer reward = 0:')
+    print(json.dumps(format_one_answer_zero_10_examples, indent=4))
 
 if __name__ == '__main__':
     # eval_qwen_math()
