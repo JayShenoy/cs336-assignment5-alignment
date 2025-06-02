@@ -353,4 +353,4 @@ def cliprange():
 
 @pytest.fixture
 def normalize_constant():
-    return 10.0
+    return 42.0
