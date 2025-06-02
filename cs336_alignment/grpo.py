@@ -30,4 +30,18 @@ def compute_group_normalized_rewards(
     
     advantage = advantage.flatten()
 
-    return advantage, raw_rewards, {}
+    metadata = {
+        'mean': torch.mean(raw_rewards),
+        'std': torch.std(raw_rewards),
+        'max': torch.max(raw_rewards),
+        'min': torch.min(raw_rewards),
+    }
+
+    return advantage, raw_rewards, metadata
+
+def compute_naive_policy_gradient_loss(
+    raw_rewards_or_advantages: torch.Tensor,
+    policy_log_probs: torch.Tensor,
+    ) -> torch.Tensor:
+
+    return -raw_rewards_or_advantages * policy_log_probs
