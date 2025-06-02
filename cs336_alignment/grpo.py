@@ -1,4 +1,5 @@
 import torch
+from typing import Literal
 
 
 def compute_group_normalized_rewards(
@@ -61,4 +62,32 @@ def compute_grpo_clip_loss(
 
     loss = -torch.minimum(unclipped_term, clipped_term)
 
-    return loss, {}
+    metadata = {
+        'token_clipped': clipped_term < unclipped_term
+    }
+
+    return loss, metadata
+
+def compute_policy_gradient_loss(
+    policy_log_probs: torch.Tensor,
+    loss_type: Literal["no_baseline", "reinforce_with_baseline", "grpo_clip"],
+    raw_rewards: torch.Tensor | None= None,
+    advantages: torch.Tensor | None= None,
+    old_log_probs: torch.Tensor | None= None,
+    cliprange: float | None= None,
+    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+
+    if loss_type == 'no_baseline':
+        assert raw_rewards is not None
+
+        return compute_naive_policy_gradient_loss(raw_rewards, policy_log_probs), {}
+    elif loss_type == 'reinforce_with_baseline':
+        assert advantages is not None
+
+        return compute_naive_policy_gradient_loss(advantages, policy_log_probs), {}
+    elif loss_type == 'grpo_clip':
+        assert advantages is not None
+        assert old_log_probs is not None
+        assert cliprange is not None
+
+        return compute_grpo_clip_loss(advantages, policy_log_probs, old_log_probs, cliprange)
