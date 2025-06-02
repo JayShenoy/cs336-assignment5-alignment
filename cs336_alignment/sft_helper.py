@@ -32,3 +32,13 @@ def tokenize_prompt_and_output(prompt_strs, output_strs, tokenizer):
         'labels': labels,
         'response_mask': response_mask,
     }
+
+def compute_entropy(logits: torch.Tensor) -> torch.Tensor:
+    p_numerator = torch.exp(logits)
+    p_denom = torch.sum(p_numerator, dim=-1, keepdim=True)
+
+    log_prob = logits - torch.logsumexp(logits, dim=-1, keepdim=True)
+
+    summands = (p_numerator / p_denom) * log_prob
+
+    return -torch.sum(summands, dim=-1)    
