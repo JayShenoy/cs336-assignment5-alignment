@@ -45,3 +45,25 @@ def compute_naive_policy_gradient_loss(
     ) -> torch.Tensor:
 
     return -raw_rewards_or_advantages * policy_log_probs
+
+def compute_grpo_clip_loss(
+    advantages: torch.Tensor,
+    policy_log_probs: torch.Tensor,
+    old_log_probs: torch.Tensor,
+    cliprange: float,
+    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+
+    log_prob_ratio = policy_log_probs / old_log_probs
+    unclipped_term = advantages * log_prob_ratio
+
+    clipped_term = torch.clip(log_prob_ratio, min=1 - cliprange, max=1 + cliprange)
+    clipped_term *= advantages
+
+    print(unclipped_term)
+    print(clipped_term)
+
+    loss = -torch.minimum(unclipped_term, clipped_term)
+
+    print(loss)
+
+    return loss, {}
