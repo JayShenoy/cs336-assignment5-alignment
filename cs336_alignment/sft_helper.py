@@ -74,3 +74,22 @@ def masked_normalize(
 
     tensor_sum = torch.sum(tensor * mask, dim=dim)
     return tensor_sum / normalize_constant
+
+def sft_microbatch_train_step(
+    policy_log_probs: torch.Tensor,
+    response_mask: torch.Tensor,
+    gradient_accumulation_steps: int,
+    normalize_constant: float = 1.0,
+    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+
+    loss = (-masked_normalize(policy_log_probs, response_mask, normalize_constant, -1)).mean()
+    loss /= gradient_accumulation_steps
+
+    loss.backward()
+
+    loss_metadata = {
+        'gradient_accumulation_steps': gradient_accumulation_steps,
+        'normalize_constant': normalize_constant
+    }
+
+    return (loss, loss_metadata)
