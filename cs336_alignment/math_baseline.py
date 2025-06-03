@@ -43,9 +43,6 @@ def evaluate_vllm(
 def eval_qwen_math():
     with open('/data/a5-alignment/MATH/validation.jsonl', 'r') as f:
         prompt_data = [json.loads(json_line) for json_line in f]
-
-    # TEST
-    # prompt_data = prompt_data[:5]
     
     prompts = []
     answers = []
