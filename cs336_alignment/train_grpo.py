@@ -1,12 +1,17 @@
 import torch
 from vllm import LLM, SamplingParams
 import json
+import random
 
 from cs336_alignment.math_baseline import evaluate_vllm
+from cs336_alignment.vllm_helper import *
 
 
-def get_starter_params():
-    return {
+with open('cs336_alignment/prompts/r1_zero.prompt', 'r') as f:
+    R1_ZERO_PROMPT = f.read()
+
+def get_starter_params(policy, debug=False):
+    params = {
         'n_grpo_steps': 200,
         'learning_rate': 1e-5,
         'advantage_eps': 1e-6,
@@ -21,16 +26,28 @@ def get_starter_params():
         'gpu_memory_utilization': 0.85,
         'loss_type': 'reinforce_with_baseline',
         'use_std_normalization': True,
-        # 'optimizer': torch.optim.AdamW(
-        #     policy.parameters(),
-        #     lr=learning_rate,
-        #     weight_decay=0.0,
-        #     betas=(0.9, 0.95),
-        # ),
     }
 
-def init_llm(params):
+    if debug:
+        params['n_grpo_steps'] = 1
+        params['rollout_batch_size'] = 4
+        params['train_batch_size'] = 4
+        params['gradient_accumulation_steps'] = 2
+        params['group_size'] = 2
+
+    if not debug:
+        params['optimizer'] = torch.optim.AdamW(
+            policy.parameters(),
+            lr=1e-5,
+            weight_decay=0.0,
+            betas=(0.9, 0.95),
+        )
+    
+    return params
+
+def init_sampling_params(params):
     sampling_params = SamplingParams(
+        n=params['group_size'],
         temperature=params['sampling_temperature'],
         top_p=1.0,
         min_tokens=params['sampling_min_tokens'],
@@ -39,29 +56,82 @@ def init_llm(params):
     sampling_params.stop = ["</answer>"]
     sampling_params.include_stop_str_in_output = True
 
-    llm = LLM(model='/data/a5-alignment/models/Qwen2.5-Math-1.5B')
+    return sampling_params
 
-    return llm, sampling_params
-
-def get_validation_data():
-    with open('/data/a5-alignment/MATH/validation.jsonl', 'r') as f:
+def get_jsonl_data(fpath):
+    with open(fpath, 'r') as f:
         prompt_data = [json.loads(json_line) for json_line in f]
     
-    prompts = []
-    answers = []
+    dataset = []
 
     for p in prompt_data:
         prompt_string = R1_ZERO_PROMPT.format(
             question=p['problem']
         )
-        prompts.append(prompt_string)
+        answer_string = p['answer']
 
-        answers.append(p['answer'])
+        dataset.append({
+            'prompt': prompt_string,
+            'answer': p['answer'],
+        })
 
-    return prompts, answers
+    return dataset
+
+def get_training_data():
+    return get_jsonl_data('/data/a5-alignment/MATH/train.jsonl')
+
+def sample_dataset(dataset, num_samples):
+    sampled_data = random.sample(dataset, num_samples)
+
+    ret = {
+        'prompts': [],
+        'answers': [],
+    }
+
+    for d in sampled_data:
+        ret['prompts'].append(d['prompt'])
+        ret['answers'].append(d['answer'])
+
+    return ret
+
+def train_policy(policy, tokenizer, vllm, sampling_params, training_data, training_params):
+    assert training_params['train_batch_size'] % training_params['gradient_accumulation_steps'] == 0, (
+        "train_batch_size must be divisible by gradient_accumulation_steps"
+    )
+    micro_train_batch_size = training_params['train_batch_size'] // training_params['gradient_accumulation_steps']
+
+    assert training_params['rollout_batch_size'] % training_params['group_size'] == 0, (
+        "rollout_batch_size must be divisible by group_size"
+    )
+    n_prompts_per_rollout_batch = training_params['rollout_batch_size'] // training_params['group_size']
+
+    assert training_params['train_batch_size'] >= training_params['group_size'], (
+        "train_batch_size must be greater than or equal to group_size"
+    )
+    n_microbatches_per_rollout_batch = training_params['rollout_batch_size'] // micro_train_batch_size
+
+    for _ in range(training_params['n_grpo_steps']):
+        sampled_training_data = sample_dataset(training_data, micro_train_batch_size)
+        prompts = sampled_training_data['prompts']
+        answers = sampled_training_data['answers']
+
+        outputs = vllm.generate(prompts, sampling_params)
+
+        for o in outputs:
+            print(o)
 
 if __name__ == '__main__':
-    params = get_starter_params()
+    DEBUG = True
 
-    llm, sampling_params = init_llm(params)
-    prompts, answers = get_validation_data()
+    policy, tokenizer = init_policy(debug=DEBUG)
+    params = get_starter_params(policy, debug=DEBUG)
+    vllm = init_vllm(
+        '/data/a5-alignment/models/Qwen2.5-Math-1.5B',
+        0,
+        42,
+        params['gpu_memory_utilization']
+    )
+    sampling_params = init_sampling_params(params)
+    training_data = get_training_data()
+
+    policy_trained = train_policy(policy, tokenizer, vllm, sampling_params, training_data, params)
