@@ -6,6 +6,8 @@ import random
 from cs336_alignment.math_baseline import evaluate_vllm
 from cs336_alignment.vllm_helper import *
 from cs336_alignment.sft_helper import tokenize_prompt_and_output, get_response_log_probs
+from cs336_alignment.drgrpo_grader import r1_zero_reward_fn
+from cs336_alignment.grpo import *
 
 
 with open('cs336_alignment/prompts/r1_zero.prompt', 'r') as f:
@@ -31,10 +33,10 @@ def get_starter_params(policy, debug=False):
 
     if debug:
         params['n_grpo_steps'] = 1
-        params['rollout_batch_size'] = 2
-        params['train_batch_size'] = 2
+        params['rollout_batch_size'] = 1
+        params['train_batch_size'] = 1
         params['gradient_accumulation_steps'] = 1
-        params['group_size'] = 2
+        params['group_size'] = 1
 
     if not debug:
         params['optimizer'] = torch.optim.AdamW(
@@ -121,29 +123,66 @@ def train_policy(policy, tokenizer, vllm, sampling_params, training_data, traini
         data_tokenized = tokenize_prompt_and_output(prompts, answers, tokenizer)
         input_ids = data_tokenized['input_ids'].to(device)
         labels = data_tokenized['labels'].to(device)
-        policy_log_probs = get_response_log_probs(
+        response_mask = data_tokenized['response_mask'].to(device)
+
+        padded_len = input_ids.shape[1]
+
+        load_policy_into_vllm_instance(policy, vllm)
+
+        vllm_rollouts = vllm.generate(prompts, sampling_params)
+
+        rollout_response_text = []
+        rollout_output_tokens = []
+
+        for rollout in vllm_rollouts:
+            input_tokens = rollout.prompt_token_ids
+
+            for r in rollout.outputs:
+                rollout_response_text.append(r.text)
+                output_tokens = input_tokens + list(r.token_ids) # Prepend with input tokens to match response_mask
+
+                pad_amount = padded_len - len(output_tokens)
+
+                if pad_amount > 0:
+                    output_tokens.extend([tokenizer.eos_token_id] * pad_amount)
+                
+                rollout_output_tokens.append(output_tokens)
+        
+        rollout_output_tokens = torch.tensor(rollout_output_tokens, device=device)
+
+        advantages, raw_rewards, reward_metadata = compute_group_normalized_rewards(
+            r1_zero_reward_fn,
+            rollout_response_text,
+            answers,
+            training_params['group_size'],
+            training_params['advantage_eps'],
+            training_params['use_std_normalization'],
+        )
+
+        print('input_ids shape:', input_ids.shape)
+        print('rollout_output_tokens shape:', rollout_output_tokens.shape)
+
+        policy_log_probs_dict = get_response_log_probs(
             policy,
             input_ids,
-            labels,
-            return_token_entropy=False
+            rollout_output_tokens,
+            return_token_entropy=True
         )
-        policy_log_probs = policy_log_probs['log_probs']
+        policy_log_probs = policy_log_probs_dict['log_probs']
+        policy_token_entropy = policy_log_probs_dict['token_entropy']
 
-        print(policy_log_probs.shape)
-        print(policy_log_probs)
+        old_log_probs = policy_log_probs # change this when doing off-policy updates
 
-        # outputs = vllm.generate(prompts, sampling_params)
-
-        # old_log_probs = []
-
-        # for o in outputs:
-        #     curr_old_log_probs = [list(d.values())[0] for d in o.outputs[0].logprobs]
-        #     curr_old_log_probs = [p.logprob for p in curr_old_log_probs]
-        #     old_log_probs.append(curr_old_log_probs)
-        
-        # old_log_probs = torch.tensor(old_log_probs).to(policy.device)
-        # print(old_log_probs.shape)
-        # print(old_log_probs)
+        grpo_microbatch_train_step(
+            policy_log_probs,
+            response_mask,
+            training_params['gradient_accumulation_steps'],
+            training_params['loss_type'],
+            raw_rewards,
+            advantages,
+            old_log_probs,
+            1.0,
+        )
 
 if __name__ == '__main__':
     DEBUG = True
@@ -152,9 +191,10 @@ if __name__ == '__main__':
     params = get_starter_params(policy, debug=DEBUG)
     vllm = init_vllm(
         '/data/a5-alignment/models/Qwen2.5-Math-1.5B',
-        0,
+        'cuda:1',
         42,
-        params['gpu_memory_utilization']
+        params['gpu_memory_utilization'],
+        debug=DEBUG
     )
     sampling_params = init_sampling_params(params)
     training_data = get_training_data()

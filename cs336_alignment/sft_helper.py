@@ -19,7 +19,7 @@ def tokenize_prompt_and_output(prompt_strs, output_strs, tokenizer):
     for i, (p_toks, o_toks) in enumerate(zip(prompt_tokens, output_tokens)):
         p_o_concat = torch.tensor(p_toks + o_toks)
         concat_len = len(p_o_concat)
-        p_o_concat_padded = F.pad(p_o_concat, (0, padded_len - concat_len), 'constant', 151643)
+        p_o_concat_padded = F.pad(p_o_concat, (0, padded_len - concat_len), 'constant', tokenizer.eos_token_id)
 
         input_ids[i] = p_o_concat_padded[:-1]
         labels[i] = p_o_concat_padded[1:]

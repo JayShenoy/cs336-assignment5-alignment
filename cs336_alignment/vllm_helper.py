@@ -13,11 +13,11 @@ def init_policy(debug=False):
     )
     tokenizer = AutoTokenizer.from_pretrained("/data/a5-alignment/models/Qwen2.5-Math-1.5B")
 
-    model.to('cuda:1')
+    model.to('cuda:0')
 
     return model, tokenizer
 
-def init_vllm(model_id: str, device: str, seed: int, gpu_memory_utilization: float = 0.85):
+def init_vllm(model_id: str, device: str, seed: int, gpu_memory_utilization: float = 0.85, debug=False):
     """
     Start the inference process, here we use vLLM to hold a model on
     a GPU separate from the policy.
