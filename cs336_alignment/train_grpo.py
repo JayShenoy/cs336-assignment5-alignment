@@ -120,36 +120,27 @@ def train_policy(policy, tokenizer, vllm, sampling_params, training_data, traini
         prompts = sampled_training_data['prompts']
         answers = sampled_training_data['answers']
 
-        data_tokenized = tokenize_prompt_and_output(prompts, answers, tokenizer)
-        input_ids = data_tokenized['input_ids'].to(device)
-        labels = data_tokenized['labels'].to(device)
-        response_mask = data_tokenized['response_mask'].to(device)
-
-        padded_len = input_ids.shape[1]
-
         load_policy_into_vllm_instance(policy, vllm)
 
         vllm_rollouts = vllm.generate(prompts, sampling_params)
 
+        rollout_input_text = []
         rollout_response_text = []
-        rollout_output_tokens = []
 
         for rollout in vllm_rollouts:
-            input_tokens = rollout.prompt_token_ids
-
             for r in rollout.outputs:
+                rollout_input_text.append(rollout.prompt)
                 rollout_response_text.append(r.text)
-                output_tokens = input_tokens + list(r.token_ids) # Prepend with input tokens to match response_mask
-
-                pad_amount = padded_len - len(output_tokens)
-
-                if pad_amount > 0:
-                    output_tokens.extend([tokenizer.eos_token_id] * pad_amount)
-                
-                rollout_output_tokens.append(output_tokens)
         
-        rollout_output_tokens = torch.tensor(rollout_output_tokens, device=device)
-
+        rollout_data_tokenized = tokenize_prompt_and_output(
+            rollout_input_text,
+            rollout_response_text,
+            tokenizer
+        )
+        rollout_input_ids = rollout_data_tokenized['input_ids'].to(device)
+        rollout_labels = rollout_data_tokenized['labels'].to(device)
+        rollout_response_mask = rollout_data_tokenized['response_mask'].to(device)
+        
         advantages, raw_rewards, reward_metadata = compute_group_normalized_rewards(
             r1_zero_reward_fn,
             rollout_response_text,
@@ -159,13 +150,13 @@ def train_policy(policy, tokenizer, vllm, sampling_params, training_data, traini
             training_params['use_std_normalization'],
         )
 
-        print('input_ids shape:', input_ids.shape)
-        print('rollout_output_tokens shape:', rollout_output_tokens.shape)
+        advantages = advantages.to(device)
+        raw_rewards = raw_rewards.to(device)
 
         policy_log_probs_dict = get_response_log_probs(
             policy,
-            input_ids,
-            rollout_output_tokens,
+            rollout_input_ids,
+            rollout_labels,
             return_token_entropy=True
         )
         policy_log_probs = policy_log_probs_dict['log_probs']
@@ -175,7 +166,7 @@ def train_policy(policy, tokenizer, vllm, sampling_params, training_data, traini
 
         grpo_microbatch_train_step(
             policy_log_probs,
-            response_mask,
+            rollout_response_mask,
             training_params['gradient_accumulation_steps'],
             training_params['loss_type'],
             raw_rewards,
