@@ -6,9 +6,6 @@ import torch
 
 
 def init_policy(debug=False):
-    if debug:
-        return None, None
-    
     model = AutoModelForCausalLM.from_pretrained(
         "/data/a5-alignment/models/Qwen2.5-Math-1.5B",
         torch_dtype=torch.bfloat16,
@@ -16,8 +13,7 @@ def init_policy(debug=False):
     )
     tokenizer = AutoTokenizer.from_pretrained("/data/a5-alignment/models/Qwen2.5-Math-1.5B")
 
-    model.to('cuda:0')
-    tokenizer.to('cuda:0')
+    model.to('cuda:1')
 
     return model, tokenizer
 
