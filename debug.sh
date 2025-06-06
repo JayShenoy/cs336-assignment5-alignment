@@ -3,8 +3,7 @@
 #SBATCH --partition=debug
 #SBATCH --qos=debug-qos
 #SBATCH -c 4
-#SBATCH --nodes=1
-#SBATCH --gpus=2
+#SBATCH --gpus=1
 #SBATCH --mem=50G
 #SBATCH --time=00:02:00
 #SBATCH --output=logs/%j.out

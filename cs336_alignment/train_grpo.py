@@ -26,22 +26,22 @@ def get_starter_params(policy, debug=False):
         'epochs_per_rollout_batch': 1,
         'train_batch_size': 256,
         'gradient_accumulation_steps': 128,
-        'gpu_memory_utilization': 0.85,
+        'gpu_memory_utilization': 0.2,
         'loss_type': 'reinforce_with_baseline',
         'use_std_normalization': True,
     }
 
     if debug:
         params['n_grpo_steps'] = 1
-        params['rollout_batch_size'] = 1
-        params['train_batch_size'] = 1
-        params['gradient_accumulation_steps'] = 1
-        params['group_size'] = 1
+        params['rollout_batch_size'] = 4
+        params['train_batch_size'] = 8
+        params['gradient_accumulation_steps'] = 4
+        params['group_size'] = 2
 
     if not debug:
         params['optimizer'] = torch.optim.AdamW(
             policy.parameters(),
-            lr=1e-5,
+            lr=params['learning_rate'],
             weight_decay=0.0,
             betas=(0.9, 0.95),
         )
@@ -97,6 +97,13 @@ def sample_dataset(dataset, num_samples):
 
     return ret
 
+def duplicate_data(arr, group_size):
+    '''
+    Ex: duplicate_data([1, 2, 3], 2) => [1, 1, 2, 2, 3, 3]
+    '''
+
+    return [x for x in arr for _ in range(group_size)]
+
 def train_policy(policy, tokenizer, vllm, sampling_params, training_data, training_params):
     assert training_params['train_batch_size'] % training_params['gradient_accumulation_steps'] == 0, (
         "train_batch_size must be divisible by gradient_accumulation_steps"
@@ -116,64 +123,80 @@ def train_policy(policy, tokenizer, vllm, sampling_params, training_data, traini
     device = policy.device
 
     for _ in range(training_params['n_grpo_steps']):
-        sampled_training_data = sample_dataset(training_data, micro_train_batch_size)
-        prompts = sampled_training_data['prompts']
-        answers = sampled_training_data['answers']
-
         load_policy_into_vllm_instance(policy, vllm)
 
-        vllm_rollouts = vllm.generate(prompts, sampling_params)
+        # One policy gradient step per train_batch_size of data
+        for rollout_batch_idx in range(0, training_params['train_batch_size'], training_params['rollout_batch_size']):
+            # Sample a batch of data, then select microbatches later
+            sampled_training_data = sample_dataset(training_data, n_prompts_per_rollout_batch)
+            prompts_batch = sampled_training_data['prompts']
+            answers_batch = sampled_training_data['answers']
 
-        rollout_input_text = []
-        rollout_response_text = []
+            prompts_batch = duplicate_data(prompts_batch, training_params['group_size'])
+            answers_batch = duplicate_data(answers_batch, training_params['group_size'])
 
-        for rollout in vllm_rollouts:
-            for r in rollout.outputs:
-                rollout_input_text.append(rollout.prompt)
-                rollout_response_text.append(r.text)
-        
-        rollout_data_tokenized = tokenize_prompt_and_output(
-            rollout_input_text,
-            rollout_response_text,
-            tokenizer
-        )
-        rollout_input_ids = rollout_data_tokenized['input_ids'].to(device)
-        rollout_labels = rollout_data_tokenized['labels'].to(device)
-        rollout_response_mask = rollout_data_tokenized['response_mask'].to(device)
-        
-        advantages, raw_rewards, reward_metadata = compute_group_normalized_rewards(
-            r1_zero_reward_fn,
-            rollout_response_text,
-            answers,
-            training_params['group_size'],
-            training_params['advantage_eps'],
-            training_params['use_std_normalization'],
-        )
+            vllm_rollouts = vllm.generate(prompts_batch, sampling_params)
 
-        advantages = advantages.to(device)
-        raw_rewards = raw_rewards.to(device)
+            rollout_input_text = []
+            rollout_response_text = []
 
-        policy_log_probs_dict = get_response_log_probs(
-            policy,
-            rollout_input_ids,
-            rollout_labels,
-            return_token_entropy=True
-        )
-        policy_log_probs = policy_log_probs_dict['log_probs']
-        policy_token_entropy = policy_log_probs_dict['token_entropy']
+            for rollout in vllm_rollouts:
+                for r in rollout.outputs:
+                    rollout_input_text.append(rollout.prompt)
+                    rollout_response_text.append(r.text)
+            
+            advantages, raw_rewards, reward_metadata = compute_group_normalized_rewards(
+                r1_zero_reward_fn,
+                rollout_response_text,
+                answers_batch,
+                training_params['group_size'],
+                training_params['advantage_eps'],
+                training_params['use_std_normalization'],
+            )
 
-        old_log_probs = policy_log_probs # change this when doing off-policy updates
+            rollout_data_tokenized = tokenize_prompt_and_output(
+                rollout_input_text,
+                rollout_response_text,
+                tokenizer
+            )
 
-        grpo_microbatch_train_step(
-            policy_log_probs,
-            rollout_response_mask,
-            training_params['gradient_accumulation_steps'],
-            training_params['loss_type'],
-            raw_rewards,
-            advantages,
-            old_log_probs,
-            1.0,
-        )
+            for _ in range(training_params['epochs_per_rollout_batch']):
+                for microbatch_idx in range(n_microbatches_per_rollout_batch):
+                    microbatch_slice = slice(
+                        microbatch_idx * micro_train_batch_size,
+                        (microbatch_idx + 1) * micro_train_batch_size
+                    )
+                                        
+                    microbatch_input_ids = rollout_data_tokenized['input_ids'][microbatch_slice].to(device)
+                    microbatch_labels = rollout_data_tokenized['labels'][microbatch_slice].to(device)
+                    microbatch_response_mask = rollout_data_tokenized['response_mask'][microbatch_slice].to(device)
+
+                    advantages_microbatch = advantages[microbatch_slice].to(device)
+                    raw_rewards_microbatch = raw_rewards[microbatch_slice].to(device)
+
+                    policy_log_probs_dict = get_response_log_probs(
+                        policy,
+                        microbatch_input_ids,
+                        microbatch_labels,
+                        return_token_entropy=True
+                    )
+                    policy_log_probs = policy_log_probs_dict['log_probs']
+                    policy_token_entropy = policy_log_probs_dict['token_entropy']
+
+                    old_log_probs = policy_log_probs # change this when doing off-policy updates
+
+                    advantages_microbatch = advantages_microbatch.unsqueeze(-1)
+
+                    loss, loss_metadata = grpo_microbatch_train_step(
+                        policy_log_probs,
+                        microbatch_response_mask,
+                        training_params['gradient_accumulation_steps'],
+                        training_params['loss_type'],
+                        raw_rewards_microbatch,
+                        advantages_microbatch,
+                        old_log_probs,
+                        1.0,
+                    )
 
 if __name__ == '__main__':
     DEBUG = True
@@ -182,7 +205,7 @@ if __name__ == '__main__':
     params = get_starter_params(policy, debug=DEBUG)
     vllm = init_vllm(
         '/data/a5-alignment/models/Qwen2.5-Math-1.5B',
-        'cuda:1',
+        'cuda:0',
         42,
         params['gpu_memory_utilization'],
         debug=DEBUG
