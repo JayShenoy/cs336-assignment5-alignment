@@ -9,6 +9,4 @@
 #SBATCH --output=logs/%j.out
 #SBATCH --error=logs/%j.err
 
-PYTHON_SCRIPT="$1"
-
-uv run ${PYTHON_SCRIPT}
+uv run cs336_alignment/train_grpo.py 1

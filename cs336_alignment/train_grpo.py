@@ -3,6 +3,7 @@ from vllm import LLM, SamplingParams
 import json
 import random
 import wandb
+import sys
 
 from cs336_alignment.math_baseline import evaluate_vllm
 from cs336_alignment.vllm_helper import *
@@ -30,6 +31,8 @@ def get_starter_params(policy, debug=False):
         'gpu_memory_utilization': 0.2,
         'loss_type': 'reinforce_with_baseline',
         'use_std_normalization': True,
+        'eval_sample_size': 1024,
+        'eval_log_frequency': 5,
     }
 
     params['optimizer'] = torch.optim.AdamW(
@@ -41,10 +44,12 @@ def get_starter_params(policy, debug=False):
 
     if debug:
         params['n_grpo_steps'] = 5
-        # params['rollout_batch_size'] = 4
-        # params['train_batch_size'] = 8
-        # params['gradient_accumulation_steps'] = 4
-        # params['group_size'] = 2
+        params['rollout_batch_size'] = 1
+        params['train_batch_size'] = 1
+        params['gradient_accumulation_steps'] = 1
+        params['group_size'] = 1
+        params['eval_sample_size'] = 16
+        params['eval_log_frequency'] = 1
     
     return params
 
@@ -83,6 +88,9 @@ def get_jsonl_data(fpath):
 def get_training_data():
     return get_jsonl_data('/data/a5-alignment/MATH/train.jsonl')
 
+def get_eval_data():
+    return get_jsonl_data('/data/a5-alignment/MATH/validation.jsonl')
+
 def sample_dataset(dataset, num_samples):
     sampled_data = random.sample(dataset, num_samples)
 
@@ -105,7 +113,7 @@ def duplicate_data(arr, group_size):
     return [x for x in arr for _ in range(group_size)]
 
 def train_policy(policy, tokenizer, vllm, sampling_params, training_data, training_params,
-                experiment_name):
+                experiment_name, eval_data):
     assert training_params['train_batch_size'] % training_params['gradient_accumulation_steps'] == 0, (
         "train_batch_size must be divisible by gradient_accumulation_steps"
     )
@@ -139,8 +147,49 @@ def train_policy(policy, tokenizer, vllm, sampling_params, training_data, traini
     train_step = 0
     eval_step = 0
 
-    for _ in range(training_params['n_grpo_steps']):
+    for grpo_step_idx in range(training_params['n_grpo_steps']):
         load_policy_into_vllm_instance(policy, vllm)
+
+        if grpo_step_idx % training_params['eval_log_frequency'] == 0:
+            sampled_eval_data = sample_dataset(eval_data, training_params['eval_sample_size'])
+            prompts_batch = sampled_eval_data['prompts']
+            answers_batch = sampled_eval_data['answers']
+
+            vllm_rollouts = vllm.generate(prompts_batch, sampling_params)
+
+            rollout_input_text = []
+            rollout_response_text = []
+
+            for rollout in vllm_rollouts:
+                for r in rollout.outputs:
+                    rollout_input_text.append(rollout.prompt)
+                    rollout_response_text.append(r.text)
+            
+            _, _, reward_metadata = compute_group_normalized_rewards(
+                r1_zero_reward_fn,
+                rollout_response_text,
+                answers_batch,
+                1,
+                training_params['advantage_eps'],
+                training_params['use_std_normalization'],
+            )
+
+            # Print a randomly sampled eval response
+            eval_rand_idx = random.randrange(training_params['eval_sample_size'])
+            print('Eval step:', eval_step)
+            print('Prompt:')
+            print(rollout_input_text[eval_rand_idx])
+            print('Correct Answer:')
+            print(answers_batch[eval_rand_idx])
+            print('LLM Response:')
+            print(rollout_response_text[eval_rand_idx])
+
+            wandb_run.log({
+                'eval_step': eval_step,
+                'eval/reward_mean': reward_metadata['mean'],
+            })
+
+            eval_step += 1
 
         # One policy gradient step per train_batch_size of data
         for rollout_batch_idx in range(0, training_params['train_batch_size'], training_params['rollout_batch_size']):
@@ -171,6 +220,11 @@ def train_policy(policy, tokenizer, vllm, sampling_params, training_data, traini
                 training_params['use_std_normalization'],
             )
 
+            wandb_run.log({
+                'train_step': train_step,
+                'train/reward_mean': reward_metadata['mean']
+            })
+
             rollout_data_tokenized = tokenize_prompt_and_output(
                 rollout_input_text,
                 rollout_response_text,
@@ -179,6 +233,8 @@ def train_policy(policy, tokenizer, vllm, sampling_params, training_data, traini
 
             for _ in range(training_params['epochs_per_rollout_batch']):
                 training_params['optimizer'].zero_grad()
+
+                rollout_batch_loss = 0
 
                 for microbatch_idx in range(n_microbatches_per_rollout_batch):
                     microbatch_slice = slice(
@@ -217,17 +273,25 @@ def train_policy(policy, tokenizer, vllm, sampling_params, training_data, traini
                         1.0,
                     )
 
-                    wandb_run.log({'train/loss': loss}, step=train_step)
-                    train_step += 1
+                    rollout_batch_loss += loss.item()
         
                 training_params['optimizer'].step()
+
+                rollout_batch_loss /= n_microbatches_per_rollout_batch
+                wandb_run.log({
+                    'train_step': train_step,
+                    'train/loss': loss
+                })
+                train_step += 1
     
     wandb_run.finish()
     
     print('Training complete')
 
 if __name__ == '__main__':
-    DEBUG = True
+    DEBUG = int(sys.argv[1])
+
+    print('Debug mode:', DEBUG)
 
     policy, tokenizer = init_policy(debug=DEBUG)
     params = get_starter_params(policy, debug=DEBUG)
@@ -240,10 +304,11 @@ if __name__ == '__main__':
     )
     sampling_params = init_sampling_params(params)
     training_data = get_training_data()
+    eval_data = get_eval_data()
 
     if DEBUG:
         experiment_name = 'debug_5_grpo_steps'
     else:
         experiment_name = 'grpo_baseline'
     policy_trained = train_policy(policy, tokenizer, vllm, sampling_params,
-                                training_data, params, experiment_name)
+                                training_data, params, experiment_name, eval_data)
