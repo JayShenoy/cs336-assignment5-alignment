@@ -2,6 +2,7 @@ import torch
 from vllm import LLM, SamplingParams
 import json
 import random
+import wandb
 
 from cs336_alignment.math_baseline import evaluate_vllm
 from cs336_alignment.vllm_helper import *
@@ -39,11 +40,11 @@ def get_starter_params(policy, debug=False):
     )
 
     if debug:
-        params['n_grpo_steps'] = 1
-        params['rollout_batch_size'] = 4
-        params['train_batch_size'] = 8
-        params['gradient_accumulation_steps'] = 4
-        params['group_size'] = 2
+        params['n_grpo_steps'] = 5
+        # params['rollout_batch_size'] = 4
+        # params['train_batch_size'] = 8
+        # params['gradient_accumulation_steps'] = 4
+        # params['group_size'] = 2
     
     return params
 
@@ -103,7 +104,8 @@ def duplicate_data(arr, group_size):
 
     return [x for x in arr for _ in range(group_size)]
 
-def train_policy(policy, tokenizer, vllm, sampling_params, training_data, training_params):
+def train_policy(policy, tokenizer, vllm, sampling_params, training_data, training_params,
+                experiment_name):
     assert training_params['train_batch_size'] % training_params['gradient_accumulation_steps'] == 0, (
         "train_batch_size must be divisible by gradient_accumulation_steps"
     )
@@ -120,6 +122,22 @@ def train_policy(policy, tokenizer, vllm, sampling_params, training_data, traini
     n_microbatches_per_rollout_batch = training_params['rollout_batch_size'] // micro_train_batch_size
 
     device = policy.device
+
+    wandb_run = wandb.init(
+        entity="jayshenoy-stanford-university",
+        project="cs336_alignment",
+        config=training_params,
+        name=experiment_name,
+    )
+
+    # Setup wandb metrics
+    wandb.define_metric("train_step")
+    wandb.define_metric("eval_step")
+    wandb.define_metric("train/*", step_metric="train_step")
+    wandb.define_metric("eval/*", step_metric="eval_step")
+
+    train_step = 0
+    eval_step = 0
 
     for _ in range(training_params['n_grpo_steps']):
         load_policy_into_vllm_instance(policy, vllm)
@@ -198,8 +216,13 @@ def train_policy(policy, tokenizer, vllm, sampling_params, training_data, traini
                         old_log_probs,
                         1.0,
                     )
+
+                    wandb_run.log({'train/loss': loss}, step=train_step)
+                    train_step += 1
         
                 training_params['optimizer'].step()
+    
+    wandb_run.finish()
     
     print('Training complete')
 
@@ -218,4 +241,9 @@ if __name__ == '__main__':
     sampling_params = init_sampling_params(params)
     training_data = get_training_data()
 
-    policy_trained = train_policy(policy, tokenizer, vllm, sampling_params, training_data, params)
+    if DEBUG:
+        experiment_name = 'debug_5_grpo_steps'
+    else:
+        experiment_name = 'grpo_baseline'
+    policy_trained = train_policy(policy, tokenizer, vllm, sampling_params,
+                                training_data, params, experiment_name)
