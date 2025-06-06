@@ -31,20 +31,19 @@ def get_starter_params(policy, debug=False):
         'use_std_normalization': True,
     }
 
+    params['optimizer'] = torch.optim.AdamW(
+        policy.parameters(),
+        lr=params['learning_rate'],
+        weight_decay=0.0,
+        betas=(0.9, 0.95),
+    )
+
     if debug:
         params['n_grpo_steps'] = 1
         params['rollout_batch_size'] = 4
         params['train_batch_size'] = 8
         params['gradient_accumulation_steps'] = 4
         params['group_size'] = 2
-
-    if not debug:
-        params['optimizer'] = torch.optim.AdamW(
-            policy.parameters(),
-            lr=params['learning_rate'],
-            weight_decay=0.0,
-            betas=(0.9, 0.95),
-        )
     
     return params
 
@@ -161,12 +160,14 @@ def train_policy(policy, tokenizer, vllm, sampling_params, training_data, traini
             )
 
             for _ in range(training_params['epochs_per_rollout_batch']):
+                training_params['optimizer'].zero_grad()
+
                 for microbatch_idx in range(n_microbatches_per_rollout_batch):
                     microbatch_slice = slice(
                         microbatch_idx * micro_train_batch_size,
                         (microbatch_idx + 1) * micro_train_batch_size
                     )
-                                        
+
                     microbatch_input_ids = rollout_data_tokenized['input_ids'][microbatch_slice].to(device)
                     microbatch_labels = rollout_data_tokenized['labels'][microbatch_slice].to(device)
                     microbatch_response_mask = rollout_data_tokenized['response_mask'][microbatch_slice].to(device)
@@ -197,6 +198,10 @@ def train_policy(policy, tokenizer, vllm, sampling_params, training_data, traini
                         old_log_probs,
                         1.0,
                     )
+        
+                training_params['optimizer'].step()
+    
+    print('Training complete')
 
 if __name__ == '__main__':
     DEBUG = True
