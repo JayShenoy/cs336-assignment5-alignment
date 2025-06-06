@@ -1,0 +1,329 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="7" skipped="0" tests="31" time="8.525" timestamp="2025-06-06T12:12:34.071754-07:00" hostname="ad12a3ca-01.cloud.together.ai"><testcase classname="tests.test_data" name="test_packed_sft_dataset" time="0.282"><failure message="NotImplementedError">def test_packed_sft_dataset():
+        sft_sample_path = FIXTURES_PATH / "sft_sample.jsonl"
+        tokenizer = AutoTokenizer.from_pretrained(FIXTURES_PATH / "Meta-Llama-3-8B")
+        seq_length = 32
+&gt;       packed_sft_dataset = get_packed_sft_dataset(
+            tokenizer=tokenizer,
+            dataset_path=sft_sample_path,
+            seq_length=seq_length,
+            shuffle=False,
+        )
+
+tests/test_data.py:18: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+tokenizer = PreTrainedTokenizerFast(name_or_path='/home/c-jshenoy/cs336-assignment5-alignment/tests/fixtures/Meta-Llama-3-8B', voc...n("&lt;|reserved_special_token_250|&gt;", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
+}
+)
+dataset_path = PosixPath('/home/c-jshenoy/cs336-assignment5-alignment/tests/fixtures/sft_sample.jsonl'), seq_length = 32, shuffle = False
+
+    def get_packed_sft_dataset(
+        tokenizer: PreTrainedTokenizerBase,
+        dataset_path: str | os.PathLike,
+        seq_length: int,
+        shuffle: bool,
+    ) -&gt; Dataset:
+        """
+        Given a tokenizer and a path to a dataset with instruction-tuning examples,
+        construct a PyTorch Dataset for language modeling. The examples should be
+        packed, i.e., all sequences in the dataset are of a constant length (`seq_length`).
+    
+        Args:
+            tokenizer: transformers.PreTrainedTokenizerBase
+                Transformers tokenizer to use in tokenizing and encoding text.
+            dataset_path: str
+                Path to file with instruction-tuning examples.
+            seq_length: int
+                Number of tokens to include in each example.
+            shuffle: bool
+                If true, shuffle the documents before packing them into examples.
+    
+        Returns:
+            PyTorch Dataset for language modeling. Each example in this dataset is a dictionary of
+            with keys "input_ids" and "labels" (both tensors of shape (seq_length, )).
+            "input_ids" contains the token IDs for the language modeling inputs, and "labels" contains
+            the token IDs for the language modeling labels.
+        """
+&gt;       raise NotImplementedError
+E       NotImplementedError
+
+tests/adapters.py:332: NotImplementedError</failure></testcase><testcase classname="tests.test_data" name="test_iterate_batches" time="0.273"><failure message="NotImplementedError">def test_iterate_batches():
+        sft_sample_path = FIXTURES_PATH / "sft_sample.jsonl"
+        tokenizer = AutoTokenizer.from_pretrained(FIXTURES_PATH / "Meta-Llama-3-8B")
+        seq_length = 32
+        batch_size = 8
+&gt;       packed_sft_dataset = get_packed_sft_dataset(
+            tokenizer=tokenizer,
+            dataset_path=sft_sample_path,
+            seq_length=seq_length,
+            shuffle=True,
+        )
+
+tests/test_data.py:60: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+tokenizer = PreTrainedTokenizerFast(name_or_path='/home/c-jshenoy/cs336-assignment5-alignment/tests/fixtures/Meta-Llama-3-8B', voc...n("&lt;|reserved_special_token_250|&gt;", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
+}
+)
+dataset_path = PosixPath('/home/c-jshenoy/cs336-assignment5-alignment/tests/fixtures/sft_sample.jsonl'), seq_length = 32, shuffle = True
+
+    def get_packed_sft_dataset(
+        tokenizer: PreTrainedTokenizerBase,
+        dataset_path: str | os.PathLike,
+        seq_length: int,
+        shuffle: bool,
+    ) -&gt; Dataset:
+        """
+        Given a tokenizer and a path to a dataset with instruction-tuning examples,
+        construct a PyTorch Dataset for language modeling. The examples should be
+        packed, i.e., all sequences in the dataset are of a constant length (`seq_length`).
+    
+        Args:
+            tokenizer: transformers.PreTrainedTokenizerBase
+                Transformers tokenizer to use in tokenizing and encoding text.
+            dataset_path: str
+                Path to file with instruction-tuning examples.
+            seq_length: int
+                Number of tokens to include in each example.
+            shuffle: bool
+                If true, shuffle the documents before packing them into examples.
+    
+        Returns:
+            PyTorch Dataset for language modeling. Each example in this dataset is a dictionary of
+            with keys "input_ids" and "labels" (both tensors of shape (seq_length, )).
+            "input_ids" contains the token IDs for the language modeling inputs, and "labels" contains
+            the token IDs for the language modeling labels.
+        """
+&gt;       raise NotImplementedError
+E       NotImplementedError
+
+tests/adapters.py:332: NotImplementedError</failure></testcase><testcase classname="tests.test_dpo" name="test_per_instance_dpo_loss" time="0.489"><failure message="NotImplementedError">def test_per_instance_dpo_loss():
+        tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    
+        model = AutoModelForCausalLM.from_pretrained(FIXTURES_PATH / "tiny-gpt2")
+        model_ref = AutoModelForCausalLM.from_pretrained(FIXTURES_PATH / "tiny-gpt2-ref")
+    
+        prompt = "The quick brown fox jumps over"
+        good_response = "the lazy dog."
+        bad_response = "their crazy frog."
+    
+&gt;       loss = compute_per_instance_dpo_loss(
+            lm=model,
+            lm_ref=model_ref,
+            tokenizer=tokenizer,
+            beta=0.5,
+            prompt=prompt,
+            response_chosen=good_response,
+            response_rejected=bad_response,
+        )
+
+tests/test_dpo.py:18: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+lm = GPT2LMHeadModel(
+  (transformer): GPT2Model(
+    (wte): Embedding(50257, 128)
+    (wpe): Embedding(1024, 128)
+    (dro...((128,), eps=1e-05, elementwise_affine=True)
+  )
+  (lm_head): Linear(in_features=128, out_features=50257, bias=False)
+)
+lm_ref = GPT2LMHeadModel(
+  (transformer): GPT2Model(
+    (wte): Embedding(50257, 128)
+    (wpe): Embedding(1024, 128)
+    (dro...((128,), eps=1e-05, elementwise_affine=True)
+  )
+  (lm_head): Linear(in_features=128, out_features=50257, bias=False)
+)
+tokenizer = GPT2TokenizerFast(name_or_path='gpt2', vocab_size=50257, model_max_length=1024, is_fast=True, padding_side='right', tr...
+	50256: AddedToken("&lt;|endoftext|&gt;", rstrip=False, lstrip=False, single_word=False, normalized=True, special=True),
+}
+)
+beta = 0.5, prompt = 'The quick brown fox jumps over', response_chosen = 'the lazy dog.', response_rejected = 'their crazy frog.'
+
+    def run_compute_per_instance_dpo_loss(
+        lm: torch.nn.Module,
+        lm_ref: torch.nn.Module,
+        tokenizer: PreTrainedTokenizerBase,
+        beta: float,
+        prompt: str,
+        response_chosen: str,
+        response_rejected: str,
+    ) -&gt; torch.Tensor:
+        """
+        Given two language models (`lm`, and the "reference model" `lm_ref`),
+        their tokenizer, the DPO beta hyperparameter, a prompt and a pair
+        of responses to the prompt, computes the value of the DPO loss for this example.
+    
+        lm: torch.nn.Module
+            Language model being trained.
+        lm_ref: torch.nn.Module
+            Reference language model.
+        tokenizer: PreTrainedTokenizerBase
+            Tokenizer for both language models.
+        beta: float
+            DPO beta hyperparameter.
+        prompt: str
+            Prompt for this instance of preference pair.
+        response_chosen: str
+            Preferred response to the prompt.
+        response_rejected: str
+            Rejected response to the prompt.
+    
+        Returns:
+            torch.Tensor with the DPO loss for this example.
+        """
+&gt;       raise NotImplementedError
+E       NotImplementedError
+
+tests/adapters.py:433: NotImplementedError</failure></testcase><testcase classname="tests.test_grpo" name="test_compute_group_normalized_rewards_normalize_by_std" time="0.042" /><testcase classname="tests.test_grpo" name="test_compute_group_normalized_rewards_no_normalize_by_std" time="0.002" /><testcase classname="tests.test_grpo" name="test_compute_naive_policy_gradient_loss" time="0.140" /><testcase classname="tests.test_grpo" name="test_compute_grpo_clip_loss_large_cliprange" time="0.003" /><testcase classname="tests.test_grpo" name="test_compute_grpo_clip_loss_small_cliprange" time="0.002" /><testcase classname="tests.test_grpo" name="test_compute_policy_gradient_loss_no_baseline" time="0.002" /><testcase classname="tests.test_grpo" name="test_compute_policy_gradient_loss_reinforce_with_baseline" time="0.002" /><testcase classname="tests.test_grpo" name="test_compute_policy_gradient_loss_grpo_clip" time="0.002" /><testcase classname="tests.test_grpo" name="test_masked_mean_dim0" time="0.002" /><testcase classname="tests.test_grpo" name="test_masked_mean_dim1" time="0.002" /><testcase classname="tests.test_grpo" name="test_masked_mean_dimlast" time="0.002" /><testcase classname="tests.test_grpo" name="test_masked_mean_dimNone" time="0.002" /><testcase classname="tests.test_grpo" name="test_grpo_microbatch_train_step_grpo_clip" time="0.003" /><testcase classname="tests.test_grpo" name="test_grpo_microbatch_train_step_grpo_clip_10_steps" time="0.005" /><testcase classname="tests.test_metrics" name="test_parse_mmlu_response" time="0.000"><failure message="NotImplementedError">def test_parse_mmlu_response():
+        mmlu_example = {
+            "subject": "virology",
+            "question": "How many human polyomaviruses are known at present?",
+            "options": ["100", "1", "10", "unknown"],
+            "answer": "A",
+        }
+        model_output = (
+            "The correct answer is B. "
+            "There is only one human polyomavirus known at present, which is the BK virus."
+        )
+&gt;       parsed_response = run_parse_mmlu_response(
+            mmlu_example=mmlu_example, model_output=model_output
+        )
+
+tests/test_metrics.py:19: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+mmlu_example = {'answer': 'A', 'options': ['100', '1', '10', 'unknown'], 'question': 'How many human polyomaviruses are known at present?', 'subject': 'virology'}
+model_output = 'The correct answer is B. There is only one human polyomavirus known at present, which is the BK virus.'
+
+    def run_parse_mmlu_response(
+        mmlu_example: dict[str, Any],
+        model_output: str,
+    ) -&gt; str | None:
+        """
+        Given an MMLU example and a model output, parse the model output into a
+        predicted option letter (i.e., 'A', 'B', 'C', or 'D'). If the model output
+        cannot be parsed into a prediction option letter, return None.
+    
+        mmlu_example: dict[str, Any]
+            Dictionary with an MMLU example. Contains the following keys:
+            - "subject": str with the subject of the question.
+            - "question": str with the text of the question.
+            - "options": list[str] with the four answer options (in order).
+                         The first option refers to letter "A", the second to "B", etc.
+            - "answer": str with the option of the correct answer (e.g., "A")
+        model_output: str
+            str with the model's output to the MMLU example.
+    
+        Returns:
+            str (one of "A", "B", "C", or "D") if the model output can be parsed into a prediction,
+            else None.
+        """
+&gt;       raise NotImplementedError
+E       NotImplementedError
+
+tests/adapters.py:381: NotImplementedError</failure></testcase><testcase classname="tests.test_metrics" name="test_parse_mmlu_response_unknown" time="0.000"><failure message="NotImplementedError">def test_parse_mmlu_response_unknown():
+        mmlu_example = {
+            "subject": "virology",
+            "question": "How many human polyomaviruses are known at present?",
+            "options": ["100", "1", "10", "unknown"],
+            "answer": "A",
+        }
+        model_output = "The correct answer is 10000 polyomaviruses."
+&gt;       parsed_response = run_parse_mmlu_response(
+            mmlu_example=mmlu_example, model_output=model_output
+        )
+
+tests/test_metrics.py:33: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+mmlu_example = {'answer': 'A', 'options': ['100', '1', '10', 'unknown'], 'question': 'How many human polyomaviruses are known at present?', 'subject': 'virology'}
+model_output = 'The correct answer is 10000 polyomaviruses.'
+
+    def run_parse_mmlu_response(
+        mmlu_example: dict[str, Any],
+        model_output: str,
+    ) -&gt; str | None:
+        """
+        Given an MMLU example and a model output, parse the model output into a
+        predicted option letter (i.e., 'A', 'B', 'C', or 'D'). If the model output
+        cannot be parsed into a prediction option letter, return None.
+    
+        mmlu_example: dict[str, Any]
+            Dictionary with an MMLU example. Contains the following keys:
+            - "subject": str with the subject of the question.
+            - "question": str with the text of the question.
+            - "options": list[str] with the four answer options (in order).
+                         The first option refers to letter "A", the second to "B", etc.
+            - "answer": str with the option of the correct answer (e.g., "A")
+        model_output: str
+            str with the model's output to the MMLU example.
+    
+        Returns:
+            str (one of "A", "B", "C", or "D") if the model output can be parsed into a prediction,
+            else None.
+        """
+&gt;       raise NotImplementedError
+E       NotImplementedError
+
+tests/adapters.py:381: NotImplementedError</failure></testcase><testcase classname="tests.test_metrics" name="test_parse_gsm8k_response" time="0.000"><failure message="NotImplementedError">def test_parse_gsm8k_response():
+        model_output = (
+            "Natalia sold 48/2 = 24 clips in May. "
+            "Natalia sold 48+24 = 72 clips altogether in April and May."
+        )
+&gt;       parsed_response = run_parse_gsm8k_response(model_output=model_output)
+
+tests/test_metrics.py:44: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+model_output = 'Natalia sold 48/2 = 24 clips in May. Natalia sold 48+24 = 72 clips altogether in April and May.'
+
+    def run_parse_gsm8k_response(
+        model_output: str,
+    ) -&gt; str | None:
+        """
+        Given a GSM8K model output, parse the model output into a predicted numeric answer by
+        taking the last number that occurs in the output.
+    
+        model_output: str
+            str with the model's output to a GSM8K example.
+    
+        Returns:
+            str with the predicted numeric answer if the model output can be parsed into a prediction,
+            else None.
+        """
+&gt;       raise NotImplementedError
+E       NotImplementedError
+
+tests/adapters.py:398: NotImplementedError</failure></testcase><testcase classname="tests.test_metrics" name="test_parse_gsm8k_response_unknown" time="0.000"><failure message="NotImplementedError">def test_parse_gsm8k_response_unknown():
+        model_output = (
+            "Natalia sold twenty-four clips in May. "
+            "Thus, Natalia sold seventy-two clips altogether in April and May."
+        )
+&gt;       parsed_response = run_parse_gsm8k_response(model_output=model_output)
+
+tests/test_metrics.py:53: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+model_output = 'Natalia sold twenty-four clips in May. Thus, Natalia sold seventy-two clips altogether in April and May.'
+
+    def run_parse_gsm8k_response(
+        model_output: str,
+    ) -&gt; str | None:
+        """
+        Given a GSM8K model output, parse the model output into a predicted numeric answer by
+        taking the last number that occurs in the output.
+    
+        model_output: str
+            str with the model's output to a GSM8K example.
+    
+        Returns:
+            str with the predicted numeric answer if the model output can be parsed into a prediction,
+            else None.
+        """
+&gt;       raise NotImplementedError
+E       NotImplementedError
+
+tests/adapters.py:398: NotImplementedError</failure></testcase><testcase classname="tests.test_sft" name="test_tokenize_prompt_and_output" time="0.236" /><testcase classname="tests.test_sft" name="test_compute_entropy" time="0.003" /><testcase classname="tests.test_sft" name="test_get_response_log_probs" time="5.865" /><testcase classname="tests.test_sft" name="test_masked_normalize_dim0" time="0.003" /><testcase classname="tests.test_sft" name="test_masked_normalize_dim1" time="0.002" /><testcase classname="tests.test_sft" name="test_masked_normalize_dimlast" time="0.002" /><testcase classname="tests.test_sft" name="test_masked_normalize_dimNone" time="0.002" /><testcase classname="tests.test_sft" name="test_sft_microbatch_train_step" time="0.002" /><testcase classname="tests.test_sft" name="test_sft_microbatch_train_step_normalize" time="0.002" /><testcase classname="tests.test_sft" name="test_sft_microbatch_train_step_10_steps" time="0.003" /></testsuite></testsuites>
