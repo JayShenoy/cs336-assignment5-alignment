@@ -4,6 +4,8 @@ import json
 import random
 import wandb
 import sys
+import argparse
+import yaml
 
 from cs336_alignment.math_baseline import evaluate_vllm
 from cs336_alignment.vllm_helper import *
@@ -289,9 +291,21 @@ def train_policy(policy, tokenizer, vllm, sampling_params, training_data, traini
     print('Training complete')
 
 if __name__ == '__main__':
-    DEBUG = int(sys.argv[1])
+    parser = argparse.ArgumentParser(description='Launch training with config from YAML file')
+    parser.add_argument('config_path', type=str, help='Path to YAML config file')
+    args = parser.parse_args()
 
-    print('Debug mode:', DEBUG)
+    try:
+        with open(args.config_path, 'r') as f:
+            config = yaml.safe_load(f)
+    except FileNotFoundError:
+        print(f"Error: Config file '{args.config_path}' not found", file=sys.stderr)
+        sys.exit(1)
+    except yaml.YAMLError as e:
+        print(f"Error parsing YAML file: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    DEBUG = config.get('debug', 0)
 
     policy, tokenizer = init_policy(debug=DEBUG)
     params = get_starter_params(policy, debug=DEBUG)
@@ -306,9 +320,16 @@ if __name__ == '__main__':
     training_data = get_training_data()
     eval_data = get_eval_data()
 
+    if 'lr' in config:
+        params['learning_rate'] = config['lr']
+
+    if 'n_grpo_steps' in config:
+        params['n_grpo_steps'] = config['n_grpo_steps']
+
     if DEBUG:
         experiment_name = 'debug_5_grpo_steps'
     else:
-        experiment_name = 'grpo_baseline'
+        experiment_name = 'grpo_baseline_lr_{}'.format(params['learning_rate'])
+    
     policy_trained = train_policy(policy, tokenizer, vllm, sampling_params,
                                 training_data, params, experiment_name, eval_data)

@@ -9,4 +9,6 @@
 #SBATCH --output=logs/%j.out
 #SBATCH --error=logs/%j.err
 
-uv run cs336_alignment/train_grpo.py 0
+CONFIG_PATH="$1"
+
+uv run cs336_alignment/train_grpo.py ${CONFIG_PATH}

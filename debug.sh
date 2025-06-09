@@ -9,4 +9,4 @@
 #SBATCH --output=logs/%j.out
 #SBATCH --error=logs/%j.err
 
-uv run cs336_alignment/train_grpo.py 1
+uv run cs336_alignment/train_grpo.py cs336_alignment/configs/debug.ini
