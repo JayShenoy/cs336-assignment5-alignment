@@ -7,6 +7,7 @@ import sys
 import argparse
 import yaml
 import os
+import datetime
 
 from cs336_alignment.math_baseline import evaluate_vllm
 from cs336_alignment.vllm_helper import *
@@ -18,10 +19,10 @@ from cs336_alignment.grpo import *
 with open('cs336_alignment/prompts/r1_zero.prompt', 'r') as f:
     R1_ZERO_PROMPT = f.read()
 
-def get_starter_params(policy, debug=False):
+def get_starter_params(policy, learning_rate, debug=False):
     params = {
         'n_grpo_steps': 200,
-        'learning_rate': 1e-5,
+        'learning_rate': learning_rate,
         'advantage_eps': 1e-6,
         'rollout_batch_size': 256,
         'group_size': 8,
@@ -116,7 +117,7 @@ def duplicate_data(arr, group_size):
     return [x for x in arr for _ in range(group_size)]
 
 def train_policy(policy, tokenizer, vllm, sampling_params, training_data, training_params,
-                experiment_name, eval_data):
+                experiment_name, eval_data, output_dir):
     assert training_params['train_batch_size'] % training_params['gradient_accumulation_steps'] == 0, (
         "train_batch_size must be divisible by gradient_accumulation_steps"
     )
@@ -134,12 +135,19 @@ def train_policy(policy, tokenizer, vllm, sampling_params, training_data, traini
 
     device = policy.device
 
+    wandb_log_dir = os.path.join(output_dir, 'wandb')
+    os.makedirs(wandb_log_dir, exist_ok=True)
     wandb_run = wandb.init(
         entity="jayshenoy-stanford-university",
         project="cs336_alignment",
         config=training_params,
         name=experiment_name,
+        dir=wandb_log_dir,
     )
+
+    # Directory to store all models
+    model_dir = os.path.join(output_dir, 'models')
+    os.makedirs(model_dir, exist_ok=True)
 
     # Setup wandb metrics
     wandb.define_metric("train_step")
@@ -153,7 +161,7 @@ def train_policy(policy, tokenizer, vllm, sampling_params, training_data, traini
     for grpo_step_idx in range(training_params['n_grpo_steps']):
         load_policy_into_vllm_instance(policy, vllm)
 
-        if grpo_step_idx % training_params['eval_log_frequency'] == 0:
+        if grpo_step_idx % training_params['eval_log_frequency'] == (training_params['eval_log_frequency'] - 1):
             sampled_eval_data = sample_dataset(eval_data, training_params['eval_sample_size'])
             prompts_batch = sampled_eval_data['prompts']
             answers_batch = sampled_eval_data['answers']
@@ -191,6 +199,11 @@ def train_policy(policy, tokenizer, vllm, sampling_params, training_data, traini
                 'eval_step': eval_step,
                 'eval/accuracy': reward_metadata['mean'],
             })
+
+            # Save model
+            curr_model_dir = os.path.join(model_dir, 'eval_step_{}'.format(eval_step))
+            policy.save_pretrained(save_directory=curr_model_dir)
+            tokenizer.save_pretrained(save_directory=curr_model_dir)
 
             eval_step += 1
 
@@ -290,8 +303,9 @@ def train_policy(policy, tokenizer, vllm, sampling_params, training_data, traini
     wandb_run.finish()
 
     # FIX: create new directory for each run
-    policy.save_pretrained(save_directory='/data/c-jshenoy/a5')
-    tokenizer.save_pretrained(save_directory='/data/c-jshenoy/a5')
+    model_final_dir = os.path.join(model_dir, 'final')
+    policy.save_pretrained(save_directory=model_final_dir)
+    tokenizer.save_pretrained(save_directory=model_final_dir)
     
     print('Training complete')
 
@@ -312,8 +326,10 @@ if __name__ == '__main__':
 
     DEBUG = config.get('debug', 0)
 
+    learning_rate = config.get('lr', 1e-5)
+
     policy, tokenizer = init_policy(debug=DEBUG)
-    params = get_starter_params(policy, debug=DEBUG)
+    params = get_starter_params(policy, learning_rate, debug=DEBUG)
     vllm = init_vllm(
         '/data/a5-alignment/models/Qwen2.5-Math-1.5B',
         'cuda:0',
@@ -325,19 +341,28 @@ if __name__ == '__main__':
     training_data = get_training_data()
     eval_data = get_eval_data()
 
-    if 'lr' in config:
-        params['learning_rate'] = config['lr']
-
     if 'n_grpo_steps' in config:
         params['n_grpo_steps'] = config['n_grpo_steps']
 
     if 'eval_sample_size' in config:
         params['eval_sample_size'] = config['eval_sample_size']
 
+    if 'use_std_normalization' in config:
+        params['use_std_normalization'] = config['use_std_normalization']
+
+    if 'eval_log_frequency' in config:
+        params['eval_log_frequency'] = config['eval_log_frequency']
+
     if DEBUG:
         experiment_name = 'debug_5_grpo_steps'
     else:
         experiment_name = os.path.splitext(os.path.basename(args.config_path))[0]
+
+    timestamp = datetime.datetime.now(datetime.timezone.utc).timestamp()
+    timestamp = int(timestamp)
+    output_dir = os.path.join('/data/c-jshenoy/a5', '{}_{}'.format(experiment_name, timestamp))
+    os.makedirs(output_dir, exist_ok=True)
     
     policy_trained = train_policy(policy, tokenizer, vllm, sampling_params,
-                                training_data, params, experiment_name, eval_data)
+                                training_data, params, experiment_name, eval_data,
+                                output_dir)
