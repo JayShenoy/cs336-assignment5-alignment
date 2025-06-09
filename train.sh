@@ -5,7 +5,7 @@
 #SBATCH -c 4
 #SBATCH --gpus=1
 #SBATCH --mem=50G
-#SBATCH --time=02:00:00
+#SBATCH --time=04:00:00
 #SBATCH --output=logs/%j.out
 #SBATCH --error=logs/%j.err
 

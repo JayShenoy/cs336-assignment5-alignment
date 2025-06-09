@@ -6,6 +6,7 @@ import wandb
 import sys
 import argparse
 import yaml
+import os
 
 from cs336_alignment.math_baseline import evaluate_vllm
 from cs336_alignment.vllm_helper import *
@@ -188,7 +189,7 @@ def train_policy(policy, tokenizer, vllm, sampling_params, training_data, traini
 
             wandb_run.log({
                 'eval_step': eval_step,
-                'eval/reward_mean': reward_metadata['mean'],
+                'eval/accuracy': reward_metadata['mean'],
             })
 
             eval_step += 1
@@ -287,6 +288,10 @@ def train_policy(policy, tokenizer, vllm, sampling_params, training_data, traini
                 train_step += 1
     
     wandb_run.finish()
+
+    # FIX: create new directory for each run
+    policy.save_pretrained(save_directory='/data/c-jshenoy/a5')
+    tokenizer.save_pretrained(save_directory='/data/c-jshenoy/a5')
     
     print('Training complete')
 
@@ -326,10 +331,13 @@ if __name__ == '__main__':
     if 'n_grpo_steps' in config:
         params['n_grpo_steps'] = config['n_grpo_steps']
 
+    if 'eval_sample_size' in config:
+        params['eval_sample_size'] = config['eval_sample_size']
+
     if DEBUG:
         experiment_name = 'debug_5_grpo_steps'
     else:
-        experiment_name = 'grpo_baseline_lr_{}'.format(params['learning_rate'])
+        experiment_name = os.path.splitext(os.path.basename(args.config_path))[0]
     
     policy_trained = train_policy(policy, tokenizer, vllm, sampling_params,
                                 training_data, params, experiment_name, eval_data)
